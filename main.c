@@ -3,6 +3,14 @@
 #pragma config(Sensor, in2,    accelerometerZ, sensorAccelerometer)
 #pragma config(Sensor, in3,    accelerometerY, sensorAccelerometer)
 #pragma config(Sensor, in4,    accelerometerX, sensorAccelerometer)
+#pragma config(Sensor, in5,    rightLineFollower, sensorLineFollower)
+#pragma config(Sensor, in6,    leftLineFollower, sensorLineFollower)
+#pragma config(Sensor, dgtl1,  sonarInput,     sensorSONAR_cm)
+#pragma config(Sensor, dgtl8,  disableAuton,   sensorDigitalIn)
+#pragma config(Sensor, dgtl9,  flag1,          sensorDigitalIn)
+#pragma config(Sensor, dgtl10, flag2,          sensorDigitalIn)
+#pragma config(Sensor, dgtl11, flag3,          sensorDigitalIn)
+#pragma config(Sensor, dgtl12, flag4,          sensorDigitalIn)
 #pragma config(Sensor, I2C_1,  ,               sensorQuadEncoderOnI2CPort,    , AutoAssign )
 #pragma config(Sensor, I2C_2,  ,               sensorQuadEncoderOnI2CPort,    , AutoAssign )
 #pragma config(Sensor, I2C_3,  ,               sensorQuadEncoderOnI2CPort,    , AutoAssign )
@@ -70,12 +78,12 @@ void setupMotors() {
  * as well as set up an autonomous selector
  * on the LCD.
  */
+int auton; // Used to store selected autonomous (0 for no autonomous)
 void pre_auton()
 {
 	string AutonModes[] = {
 		"No Autonomous",
-		"Support L. Side",
-		"Support R. Side",
+		"Autonomous 1",
 	};
 	int currentSelection = 0;
 	int autonomousLength = 3;
@@ -90,41 +98,58 @@ void pre_auton()
 	setupMotors();
 
 	// Set up the arcade control settings for dual joysticks on the main
-	// controller, and pass the left and right base motors as parameters
+	// controller, and pass the left and  right base motors as parameters
 	setupArcadeControl(DualJoystick, LeftBase, RightBase);
 	clearTimer(T1);
 	clearLCDLine(0);
 	clearLCDLine(1);
+	bLCDBacklight = true; // Turn on LCD Backlight, since we are in use
 	displayLCDCenteredString(0, AutonModes[currentSelection]);
 	displayLCDCenteredString(1, " <   Select   > ");
-	while (time1[T1] <= 23000) {
-		if (nLCDButtons & 1) {
-			// Left button pressed
-			currentSelection = (currentSelection - 1) % autonomousLength;
-			displayLCDCenteredString(0, AutonModes[currentSelection]);
-		} else if (nLCDButtons & 2) {
-			// Middle button pressed
-			break;
-		} else if (nLCDButtons & 3) {
-			// Right button pressed
-			currentSelection = (currentSelection + 1) % autonomousLength;
-			clearLCDLine(0);
-			displayLCDCenteredString(0, AutonModes[currentSelection]);
+	if (!SensorValue[disableAuton]) {
+		while (!lcdButtonPressed(LCDCenterButton)) {
+			waitForLCDPress();
+			if (lcdButtonPressed(LCDLeftButton)) {
+				// Left button pressed
+				currentSelection = (currentSelection - 1) % autonomousLength;
+				displayLCDCenteredString(0, AutonModes[currentSelection]);
+				waitForRelease(LCDAnyButton);
+			} else if (lcdButtonPressed(LCDRightButton)) {
+				// Right button pressed
+				currentSelection = (currentSelection + 1) % autonomousLength;
+				clearLCDLine(0);
+				displayLCDCenteredString(0, AutonModes[currentSelection]);
+				waitForRelease(LCDAnyButton);
+			}
 		}
+		auton = currentSelection;
 	}
 }
 
+task openClaw() {
+	motor[Claw] = 127;
+	wait1Msec(420);
+	motor[Claw] = 0;
+}
+
+void closeClaw() {
+	motor[Claw] = -127;
+	wait1Msec(420);
+	motor[Claw] = 0;
+}
 
 task autonomous() {
-	motor[Claw] = -127;
-	wait1Msec(20);
-	motor[Claw] = 0;
-	driveForward(64.8, LeftBase, RightBase);
-	turnDegrees(180, LeftBase, RightBase, gyro);
-	driveForward(68, LeftBase, RightBase);
-	motor[Claw] = 127;
-	wait1Msec(20);
-	motor[Claw] = 0;
+	if (auton == 0 || SensorValue[disableAuton]) return; // No auton, possibly with kill switch
+	// Current time breakdown:
+	// 900 ms			Used for claw opening/close		Can be separated into tasks for opening only
+	// *** ms			Used for driving base/encoder	Can NOT be separated into tasks
+	startTask(openClaw); // Separate task to do that while starting the driving itself
+	driveForward(58.7, LeftBase, RightBase); // Drive to cone
+	closeClaw(); // Grab cone
+	driveBackward(45, LeftBase, RightBase); // Back up until a good distance to turn from
+	turnDegrees(165, LeftBase, RightBase, gyro); // Turn 165 degrees (face target)
+	driveForward(50, LeftBase, RightBase);
+	startTask(openClaw);
 }
 
 /*
@@ -138,12 +163,15 @@ task autonomous() {
  *     Button 5D - Lift Down
  */
 task usercontrol() {
+	setupMotors();
+	startTask(autonomous);
+	while (true) {} // Let's stop here... I'd rather not go through the trouble of doing anything  else.
 	startTask(arcadeControl);
   while (true)
   {
-		motor[LeftBase] = getValueOf(Ch3);
-		motor[RightBase] = getValueOf(Ch2);
+		//motor[LeftBase] = getValueOf(Ch3);
+		//motor[RightBase] = getValueOf(Ch2);
 		motor[Lift] = getButtonChannel(Btn6);
-		motor[Claw] = getButtonChannel(Btn5);
+		motor[Claw] = getButtonChannel(Btn5, 127);
   }
 }

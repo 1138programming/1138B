@@ -58,6 +58,13 @@ typedef enum ControllerConstants {
 	DualJoystickXmtr2,
 } ControllerConstants;
 
+typedef enum LCDConstants {
+	LCDLeftButton = 1,
+	LCDCenterButton = 2,
+	LCDRightButton = 4,
+	LCDAnyButton = 7,
+} LCDConstants;
+
 const float wheelDiameter = 4.0; // Inches
 const float encoderRevolutionTicks = 627.2; // Encoder ticks per revolution
 const float inchesPerRevolution = wheelDiameter * PI;
@@ -164,7 +171,7 @@ tMotor ac_leftMotor;
 tMotor ac_rightMotor;
 TVexJoysticks ac_xAxis;
 TVexJoysticks ac_yAxis;
-int ac_fixedSpeed;
+int ac_fixedSpeed = 0;
 
 /*
  * setupArcadeControl(mode, leftMotor, rightMotor)
@@ -223,42 +230,15 @@ void setupArcadeControl(
  */
 task arcadeControl() {
 	// Define a few variables
-	int xAxis;
-	int yAxis;
-	int leftMotor;
-	int rightMotor;
-	float multiplier;
+	int rawXAxis;
+	int rawYAxis;
 	// Loop that runs the actual arcade control
 	while (true) {
 		// Get new joystick values
-		xAxis = getValueOf(ac_xAxis, 10); // Thresholded to 10
-		yAxis = getValueOf(ac_yAxis);
-		if (ac_fixedSpeed && yAxis) {
-			// Set the speed to the given "fixed"
-			// speed only if it is both defined and
-			// we have a valid joystick value
-			yAxis = ac_fixedSpeed;
-		}
-		leftMotor  = (yAxis * 3 / 4) + ((xAxis / 127) * (yAxis / 4));
-		rightMotor = (xAxis * 3 / 4) - ((xAxis / 127) * (yAxis / 4));
-		multiplier = 0;
-		if (leftMotor || rightMotor) {
-			if (leftMotor > rightMotor) {
-				multiplier = yAxis / leftMotor;
-			} else {
-				multiplier = yAxis / rightMotor;
-			}
-		} else {
-			if (xAxis < 0) {
-				motor[ac_leftMotor]  = -127;
-				motor[ac_rightMotor] = 127;
-			} else if (xAxis > 0) {
-				motor[ac_leftMotor]  = 127;
-				motor[ac_rightMotor] = -127;
-			}
-		}
-		motor[ac_leftMotor]  = leftMotor * multiplier;
-		motor[ac_rightMotor] = rightMotor * multiplier;
+		rawXAxis = getValueOf(ac_xAxis);
+		rawYAxis = getValueOf(ac_yAxis);
+		motor[ac_leftMotor] = rawYAxis + rawXAxis;
+		motor[ac_rightMotor] = rawYAxis - rawXAxis;
 	}
 }
 
@@ -337,11 +317,11 @@ void driveForward(float inches, tMotor leftMotor, tMotor rightMotor) {
 	int encoderValue = encoderValuePerInch * inches;
 	nMotorEncoder[leftMotor]  = 0;
 	nMotorEncoder[rightMotor] = 0;
-	while (abs(encoderValue - average(
+	while (average(
 								abs(nMotorEncoder[leftMotor]),
 								abs(nMotorEncoder[rightMotor])
 								)
-							) >= (encoderValue * tolerance)) {
+					<= (encoderValue * (1.0 - tolerance))) {
 		motor[leftMotor]  = 127;
 		motor[rightMotor] = 127;
 	}
@@ -349,18 +329,74 @@ void driveForward(float inches, tMotor leftMotor, tMotor rightMotor) {
 	motor[rightMotor] = 0;
 }
 
+void driveBackward(float inches, tMotor leftMotor, tMotor rightMotor) {
+	int encoderValue = encoderValuePerInch * inches * -1;
+	nMotorEncoder[leftMotor]  = 0;
+	nMotorEncoder[rightMotor] = 0;
+	while (average(
+								abs(nMotorEncoder[leftMotor]),
+								abs(nMotorEncoder[rightMotor])
+								)
+					<= (encoderValue * (1.0 - tolerance))) {
+		motor[leftMotor]  = 127;
+		motor[rightMotor] = 127;
+	}
+	motor[leftMotor]  = 0;
+	motor[rightMotor] = 0;
+}
+
+/*
+ * turnDegrees(degrees, leftMotor, rightMotor, gyroSensor)
+ *
+ * Turn the specified number of degrees.
+ */
 void turnDegrees(float degrees, tMotor leftMotor, tMotor rightMotor, tSensors gyroSensor) {
-	while (abs(SensorValue[gyroSensor]) < degrees) {
+	SensorValue[gyroSensor] = 0;
+	while (abs(SensorValue[gyroSensor] / 10) < (degrees)) {
 		if (degrees < 0) {
 			// Turn left
-			motor[leftMotor]  = 50;
-			motor[rightMotor] = -50;
+			motor[leftMotor]  = 100;
+			motor[rightMotor] = -100;
 		} else {
 			// Turn right
-			motor[leftMotor]  = -50;
-			motor[rightMotor] = 50;
+			motor[leftMotor]  = -100;
+			motor[rightMotor] = 100;
 		}
 	}
 	motor[leftMotor]  = 0;
 	motor[rightMotor] = 0;
+}
+
+/* SECTION: LCD CONTROL */
+
+/*
+ * waitForLCDPress(button)
+ *
+ * Waits for the specified button (or any button, if none specified)
+ * to be pressed
+ */
+void waitForLCDPress(LCDConstants button = LCDAnyButton) {
+	while ((nLCDButtons & button) == 0) {}
+	wait1Msec(5);
+}
+
+/*
+ * waitForLCDRelease(button)
+ *
+ * Waits for the specified button (or any button, if none specified)
+ * to be released
+ */
+void waitForRelease(LCDConstants button = LCDAnyButton) {
+	while ((nLCDButtons & button) != 0) {}
+	wait1Msec(5);
+}
+
+/*
+ * lcdButtonPressed(button)
+ *
+ * Returns whether or not the specified button
+ * is pressed
+ */
+bool lcdButtonPressed(LCDConstants button) {
+	return (bool)(nLCDButtons & button);
 }
