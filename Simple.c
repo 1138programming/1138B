@@ -86,77 +86,65 @@ void pre_auton()
 	setupMotors();
 }
 
-/*---------------------------------------------------------------------------*/
-/*                                                                           */
-/*                              Autonomous Task                              */
-/*                                                                           */
-/*  This task is used to control your robot during the autonomous phase of   */
-/*  a VEX Competition.                                                       */
-/*                                                                           */
-/*  You must modify the code to add your own robot specific commands here.   */
-/*---------------------------------------------------------------------------*/
-
-
-task autonomous()
-{
-  /*
-   * Assume that the preload is placed in a way that allows pushing it forward,
-   * moving backwards, and being able to pick it up from there.
-   * -127 opens the claw, right?
-   * There are encoders on the left base, right base, and the lift assemblies
-   * We are assuming that the IMEs are in a working order on 393 motor
-   * Currently untested. Hope to get this working quickly
-   */
-   float wheelDiameter = 4.0; // 4.0 inch wheel diameter
-   float wheelCircumference = PI * wheelDiameter; // Circumference of the wheel
-   float encoderPerRotation = 627.2; // Encoder counts per one full rotation
-   float oneFoot = (encoderPerRotation / wheelCircumference) * 12;
-   int baseSpeed = 100;
-   
-   if (!SensorValue[enableAuton]) return; // No auton, possibly with kill switch
-   
-   // Raise lift and open the claw
-   nMotorEncoder[Lift] = 0;
-   moveMotorTarget(Lift, 1400, baseSpeed);
-   while(!getMotorTargetCompleted(Lift))
-     sleep(10);
-   motor[Claw] = -127;
-   wait1Msec(420);
-   motor[Claw] = 0;
-   // Move forward until the line (roughly)
-   nMotorEncoder[LeftBase] = nMotorEncoder[RightBase] = 0; // Reset encoders for the base
-   moveMotorTarget(LeftBase, oneFoot * 1.9, baseSpeed);
-   moveMotorTarget(RightBase, oneFoot * 1.9, baseSpeed);
-   while (!(getMotorTargetCompleted(LeftBase) && getMotorTargetCompleted(RightBase)))
-     sleep(10);
-   // Here, there is a break, because on the field, there is a line. It could be used
-   // for the autonomous, but due to issues with the robot, there was an inability to
-   // test the robot, and not including code to handle a line sensor makes sure that,
-   // for the time being, we are using code that we know will work as expected
-   nMotorEncoder[LeftBase] = nMotorEncoder[RightBase] = 0; // Reset encoders for the base
-   moveMotorTarget(LeftBase, oneFoot * 1.9, baseSpeed);
-   moveMotorTarget(RightBase, oneFoot * 1.9, baseSpeed);
-   while (!(getMotorTargetCompleted(LeftBase) && getMotorTargetCompleted(RightBase)))
-     sleep(10);
-   // Move lift down, and open claw
-   nMotorEncoder[Lift] = 0;
-   moveMotorTarget(Lift, -1000, baseSpeed * -1);
-   while(!getMotorTargetCompleted(Lift))
-     sleep(10);
-   motor[Claw] = -127;
-   wait1Msec(420);
-   motor[Claw] = 0;
+void driveBase(int speed, int time) {
+	motor[RightBase] = speed;
+	motor[LeftBase] = speed;
+	wait1Msec(time);
+	motor[RightBase] = 0;
+	motor[LeftBase] = 0;
+}
+void turn(int speed, int reverse, int time) {
+	motor[RightBase] = speed;
+	motor[LeftBase] = reverse;
+	wait1Msec(time);
+	motor[RightBase] = 0;
+	motor[LeftBase] = 0;
+}
+void driveLift(int speed, int time) {
+	motor[Lift] = speed;
+	wait1Msec(time);
+	motor[Lift] = 0;
+}
+void driveClaw(int speed, int time) {
+	motor[Claw] = speed;
+	wait1Msec(time);
+	motor[Claw] = 0;
 }
 
-/*---------------------------------------------------------------------------*/
-/*                                                                           */
-/*                              User Control Task                            */
-/*                                                                           */
-/*  This task is used to control your robot during the user control phase of */
-/*  a VEX Competition.                                                       */
-/*                                                                           */
-/*  You must modify the code to add your own robot specific commands here.   */
-/*---------------------------------------------------------------------------*/
+/*
+ * startTask(autonomous)
+ *
+ * The autonomous task for the competition. Currently contains code
+ * that relies on timing, but there are plans to make it more reliable
+ * using a combination of encoders, line sensors/ultrasonic sensors, and
+ * the gyro.
+ */
+task autonomous() {
+	// Kill switch: Remove the jumper on pin 8 to disable auton
+	if (!SensorValue[enableAuton]) return;
+	// Autonomous: Grab the cone and place it on the mobile goal.
+	// Lift up arm initially
+	driveLift(127, 600);
+	// Move forward, and then quickly backwards, and then stop for inertia to open the claw
+	driveBase(127, 550);
+	driveBase(-127, 200);
+	// Wait time for the claw to finish falling
+	wait1Msec(500);
+	// Close the claw on the cone
+	driveClaw(-127, 420);
+	// Lift the arm enough to be able to move to the mobile goal
+	driveLift(127, 2300);
+	// Back up a little bit
+	driveBase(-127, 300);
+	// Turn to face the mobile goal
+	turn (127, -127, 215);
+	// Reach the mobile goal
+  driveBase(127, 1015);
+	// Lower the arm onto the mobile goal
+	driveLift(-127, 800);
+	// Release the cone
+	driveClaw(127, 420);
+}
 
 /*
  * compare(valueOne, valueTwo)
@@ -185,10 +173,21 @@ int compare(int valueOne, int valueTwo) {
 	return (valueOne > valueTwo) - (valueOne < valueTwo);
 }
 
+/*
+ * getChannel(value)
+ * getChannel(value, threshold)
+ *
+ * Return the value of a channel, thresholded to a certain value
+ */
 int getChannel(TVexJoysticks value, int threshold = 20) {
 	return fabs(vexRT[value]) > threshold ? vexRT[value] : threshold;
 }
 
+/*
+ * startTask(usercontrol());
+ *
+ * User control code for the competition. This runs when in "Driver" Control
+ */
 task usercontrol()
 {
 	// Loop forever
@@ -196,11 +195,11 @@ task usercontrol()
   {
   	// Joystick 1 - Arcade Control (Dual Joystick)
   	if (SensorValue[arcadeFlag]) {
-  		motor[LeftBase] = getChannel(Ch3) + getChannel(Ch1); // Left Side
+  		motor[LeftBase]  = getChannel(Ch3) + getChannel(Ch1); // Left Side
   		motor[RightBase] = getChannel(Ch3) - getChannel(Ch1); // Right Side
   	} else {
-  		motor[LeftBase] = getChannel(Ch3);
-  		motor[RightBase] = getChannel(Ch2);
+  		motor[LeftBase]  = getChannel(Ch3); // Left Side
+  		motor[RightBase] = getChannel(Ch2); // Right Side
   	}
 
   	// Joystick 2 - Lift/Claw control (Shoulder Buttons)
