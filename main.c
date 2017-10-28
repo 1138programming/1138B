@@ -165,13 +165,13 @@ task autonomous() {
 task usercontrol() {
 	setupMotors();
 	startTask(autonomous);
-	while (true) {} // Let's stop here... I'd rather not go through the trouble of doing anything  else.
+	//while (true) {} // Let's stop here... I'd rather not go through the trouble of doing anything  else.
 	startTask(arcadeControl);
   while (true)
   {
 		//motor[LeftBase] = getValueOf(Ch3);
 		//motor[RightBase] = getValueOf(Ch2);
-		motor[Lift] = getButtonChannel(Btn6);
-		motor[Claw] = getButtonChannel(Btn5, 127);
+		motor[Lift] = getButtonChannel(Btn6Xmtr2, 127);
+		motor[Claw] = getButtonChannel(Btn5Xmtr2, 127);
   }
 }
