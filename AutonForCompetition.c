@@ -40,7 +40,7 @@ void Goforward (int speed, int time){
 	//motor[leftBaseOne] = reverse;
 	//motor[leftBaseThree] = reverse;
 	//wait1Msec(time);
-//}	
+//}
 void Armovement (int speed, int time){
 	motor[rightTopLift] = speed;
 	motor[rightBottomLift] = speed;
@@ -55,7 +55,7 @@ task main()
 {
 Goforward (127, 1000);
 Armovement (127, 1000);
-ClawMovement (127, 1000); 
+ClawMovement (127, 1000);
 //Goforward (-127, 500);
 //Turn (-127,-127, 500);
 }
