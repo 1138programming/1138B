@@ -174,6 +174,17 @@ void turnRight(int speed, int degrees10) {
 	motor[LeftBase]  = 0;
 }
 
+void openClaw() {
+	motor[Claw] = 127;
+	wait1Msec(500);
+	motor[Claw] = 0;
+}
+
+void closeClaw() {
+	motor[Claw] = -63;
+	wait1Msec(500);
+}
+
 void driveLift(int speed, int time) {
 	motor[Lift] = speed;
 	wait1Msec(time);
@@ -192,8 +203,28 @@ void driveClaw(int speed, int time) {
  * using a combination of encoders, line sensors/ultrasonic sensors, and
  * the gyro.
  */
+
+// Gyro
+void turnGyro(int degrees) {
+    //Specify the number of degrees for the robot to turn (1 degree = 10, or 900 = 90 degrees)
+  int degrees10 = degrees * 10;
+  //Specify the amount of acceptable error in the turn
+  int error = 5;
+
+  //While the absolute value of the gyro is less than the desired rotation - 100...
+  while(abs(SensorValue[gyro]) < degrees10 - error)
+  {
+    motor[LeftBase] = -50;
+    motor[RightBase] = 50;
+  }
+  //Brief brake to eliminate some drift
+  motor[LeftBase] = 127;
+  motor[RightBase] = -127;
+  wait1Msec(50);
+  motor[LeftBase] = motor[RightBase] = 0;
+}
+
 task autonomous() {
-	driveLift(127, 500);
 	// Kill switch: Remove the jumper on pin 9 to lower lift
 	if (SensorValue[lowerLift]) {
 		motor[Lift] = -63;
@@ -209,33 +240,46 @@ task autonomous() {
 	wait1Msec(200);
 	SensorType[gyro] = sensorGyro;
 //	wait1Msec(2000);
-
-	wait1Msec(2000);						// Robot waits for 2000 milliseconds before executing program
-	if(SensorValue(sonarInput != -1)){
-		while(SensorValue(sonarInput) > 3 )		// Loop while robot's Ultrasonic sensor is further than 20 inches away from an object
-		{                                                                         // || (or) it is '-1'.  (-1 is the value returned when nothing is in it's visable range)
-			motor[RightBase] = 127;			// Motor on port2 is run at half (63) power forward
-			motor[LeftBase]  = 127;			// Motor on port3 is run at half (63) power forward
-		}
-		motor[RightBase] = 0;				//we are close enough.  Stop the motors
-		motor[LeftBase] = 0;
-	}
-	driveLift(-127, 300);
-	driveClaw(127, 420);
-  //Clear the encoders associated with the left and right motors
-	nMotorEncoder[RightBase] = 0;
-	nMotorEncoder[LeftBase] = 0;
-
-	//While less than 1000 encoder counts of the right and left motors
-//	while(nMotorEncoder[RightBase] > -1000)
+	openClaw(); // 500 ms
+	driveLift(127, 750); // Another 500 ms
+	resetMotorEncoder(Claw);
 	resetMotorEncoder(LeftBase);
-	resetMotorEncoder(RightBase);
-	while(nMotorEncoder[LeftBase] > -1000 & nMotorEncoder[RightBase] > -1000)
+	wait1Msec(750);						// Robot waits for 2000 milliseconds before executing program
+	if (SensorValue[sonarInput] != -1){
+		// Ultrasonic is available; use that to grab the cone
+		while (SensorValue(sonarInput) > 12) {
+			motor[RightBase] = 63;			// Motor on port2 is run at half (63) power forward
+			motor[LeftBase]  = 63;			// Motor on port3 is run at half (63) power forward
+		}
+		motor[RightBase] = -127;				//we are close enough.  Stop the motors
+		motor[LeftBase] = -127;
+		wait1Msec(100);
+		motor[LeftBase] = motor[RightBase] = 0;
+	} else {
+		// No ultrasonic/not working; fallback to encoders
+		while(abs(nMotorEncoder[LeftBase]) < 125) {
+			//Move forward at full power
+			motor[RightBase] = 127;
+			motor[LeftBase]	= 127;
+		}
+		motor[LeftBase] = motor[RightBase] = -127;
+		wait1Msec(100);
+		motor[LeftBase] = motor[RightBase] = 0;
+	}
+	wait1Msec(500); // Wait for claw to fall down
+	closeClaw();
+  //Clear the encoders associated with the left and right motors
+	resetMotorEncoder(LeftBase);
+	while(abs(nMotorEncoder[LeftBase]) < 100)
 	{
 		//Move in reverse at full power
 		motor[RightBase] = -127;
 		motor[LeftBase]	= -127;
 	}
+	motor[RightBase] = motor[LeftBase] = 0;
+	// Turn left 23 degrees, or something like that
+	turnGyro(23);
+
 
 }
 /*
@@ -258,7 +302,7 @@ task usercontrol()
   	}
 
   	// Joystick 2 - Lift/Claw control (Shoulder Buttons)
-  	motor[Claw] = compare(vexRT[Btn5UXmtr2], vexRT[Btn5DXmtr2]) * 127;
-  	motor[Lift] = compare(vexRT[Btn6UXmtr2], vexRT[Btn6DXmtr2]) * 127;
+  	motor[Claw] = compare(vexRT[Btn5UXmtr2], vexRT[Btn5DXmtr2]) * 63;
+  	motor[Lift] = compare(vexRT[Btn6UXmtr2], vexRT[Btn6DXmtr2]) * 63;
   }
 }
