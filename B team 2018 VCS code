@@ -1,0 +1,71 @@
+vex::brain Brain;
+vex::motor RightD1 = vex::motor(vex::PORT1);
+vex::motor RightD2 = vex::motor(vex::PORT2);
+vex::motor RightD3 = vex::motor(vex::PORT3);
+vex::motor LeftD1 = vex::motor(vex::PORT4,false);
+vex::motor LeftD2 = vex::motor(vex::PORT5,false);
+vex::motor LeftD3 = vex::motor(vex::PORT6,false);
+vex::motor Turn1 = vex::motor(vex::PORT7);
+vex::motor Turn2 = vex::motor(vex::PORT8,false);
+vex::motor Claw = vex::motor(vex::PORT9);
+vex::controller Controller = vex::controller();
+vex::controller ControllerP = vex::controller(vex::controllerType::partner);
+
+int main() 
+{
+while(true)
+    {
+    float percentR = Controller.Axis2.value() / 127;
+    float percentL = Controller.Axis3.value() / 127;
+    float percentP1 = ControllerP.Axis2.value() / 127;
+    float percentP2 = ControllerP.Axis3.value() / 127;
+        
+    if (percentR > 0) {
+       RightD1.spin(vex::directionType::fwd);
+        RightD2.spin(vex::directionType::fwd);
+        RightD3.spin(vex::directionType::fwd);
+    } else if (percentR < 0) {
+        RightD1.spin(vex::directionType::rev);
+        RightD2.spin(vex::directionType::rev);
+        RightD3.spin(vex::directionType::rev);
+    } else {
+        RightD1.stop();
+        RightD2.stop();
+        RightD3.stop();
+    }
+    
+    if (percentL > 0){
+        LeftD1.spin(vex::directionType::fwd);
+        LeftD2.spin(vex::directionType::fwd);
+        LeftD3.spin(vex::directionType::fwd);
+       
+    } else if (percentL < 0){
+        LeftD1.spin(vex::directionType::rev);
+        LeftD2.spin(vex::directionType::rev);
+        LeftD3.spin(vex::directionType::rev);
+    } else {
+        LeftD1.stop();
+        LeftD2.stop();
+        LeftD3.stop();
+    }
+    
+    if (percentP1 > 0) {
+        Turn1.spin(vex::directionType::fwd);
+        Turn2.spin(vex::directionType::fwd);
+    } else if (percentP1 < 0){
+        Turn1.spin(vex::directionType::rev);
+        Turn2.spin(vex::directionType::rev);
+    } else {
+        Turn1.stop();
+        Turn2.stop();
+    }
+    
+   if (percentP2 > 0){
+       Claw.spin(vex::directionType::fwd);
+   } else if (percentP2 < 0){
+       Claw.spin(vex::directionType::rev);
+   } else{
+       Claw.stop();
+   }
+  }
+}
